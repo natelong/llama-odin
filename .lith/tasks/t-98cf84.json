@@ -3,10 +3,10 @@
   "milestone": "mi-9be7df",
   "title": "Integrate upstream llama.cpp dependency",
   "description": "Track upstream llama.cpp repository via Git submodule (pinned to stable commit e.g. b3800+) or vendored in vendor/llama.cpp, ensuring ggml and internal headers (such as llama-ext.h) required by the staging shim are accessible.\n\nAcceptance Criteria:\n- Upstream llama.cpp source tracked via submodule or vendored path\n- Core headers (llama.h, ggml.h, llama-ext.h) accessible for build system\n- Clean integration without unintended modifications to upstream files",
-  "status": "open",
+  "status": "completed",
   "blocked_by": [],
-  "assigned_to": null,
+  "assigned_to": "worker-t-98cf84",
   "created_at": "2026-09-30T20:17:24.639866Z",
-  "updated_at": "2026-09-30T20:17:24.639866Z",
-  "completed_at": null
+  "updated_at": "2026-09-30T20:46:14.725367Z",
+  "completed_at": "2026-09-30T20:46:14.725367Z"
 }
