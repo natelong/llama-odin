@@ -1,0 +1,10 @@
+# Build directories
+build/
+bin/
+
+# Git worktrees
+worktrees/
+.worktrees/
+
+# OS files
+.DS_Store
