@@ -1,0 +1,17 @@
+# GNU ld version script for libllama_odin.
+#
+# Only the intended C-ABI is exported and every other — including all
+# C++-mangled (_ZN...) — symbol is bound into the local section:
+#   llama_*   covers both the upstream llama_* C-ABI and the llama_odin_*
+#             wrapper functions.
+#   ggml_*    covers the ggml C-ABI (ggml.h, ggml-backend.h, ggml-cpu.h,
+#             ggml-opt.h, ggml-metal.h) exposed through the public headers.
+#   gguf_*    covers the gguf C-ABI (gguf.h).
+{
+  global:
+    llama_*;
+    ggml_*;
+    gguf_*;
+  local:
+    *;
+};

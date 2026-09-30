@@ -1,0 +1,13 @@
+# macOS linker export list (ld -exported_symbols_list) for libllama_odin.
+#
+# All C symbols on Mach-O carry a leading underscore and only these are
+# re-exported through the shared library; every other — including all
+# C++-mangled (___Z...) — symbol stays local:
+#   _llama_*  covers both the upstream llama_* C-ABI and the llama_odin_*
+#             wrapper functions.
+#   _ggml_*   covers the ggml C-ABI (ggml.h, ggml-backend.h, ggml-cpu.h,
+#             ggml-opt.h, ggml-metal.h) exposed through the public headers.
+#   _gguf_*   covers the gguf C-ABI (gguf.h).
+_ggml_*
+_gguf_*
+_llama_*

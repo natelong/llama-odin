@@ -60,6 +60,29 @@ endforeach()
 target_link_libraries(llama_odin PRIVATE llama)
 target_link_libraries(llama_odin_static PRIVATE llama)
 
+# ---------------------------------------------------------------------------
+# Exported C-ABI surface
+#
+# Only the intended C-ABI leaves the shared library: the upstream llama_*
+# C functions required by the Odin bindings, the llama_odin_* wrappers, and
+# the ggml_*/gguf_* C functions reachable from the public headers (see the
+# shipped include/). Everything else — in particular the C++-mangled symbols
+# from the vendored llama.cpp C++ sources — stays local.
+#
+# Platform-conditional: export filtering is applied to the shared target on
+# Apple (exported_symbols_list) and Linux GNU ld (version script). Mach-O C
+# symbols carry a leading underscore in the export list.
+# Windows DLLs export only explicitly dllexport-tagged functions; no
+# additional filtering is applied.
+# ---------------------------------------------------------------------------
+if(APPLE)
+    target_link_options(llama_odin PRIVATE
+        "SHELL:-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/cmake/llama-odin-exported-symbols.exp")
+elseif(UNIX)
+    target_link_options(llama_odin PRIVATE
+        "SHELL:-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/llama-odin-exports.version")
+endif()
+
 if(APPLE)
     set_target_properties(llama_odin PROPERTIES
         MACOSX_RPATH ON

@@ -180,6 +180,24 @@ struct llama_context * llama_odin_get_ctx_other(struct llama_context * ctx) {
 }
 ```
 
+### 4.1 Exported Symbol Surface
+
+The shared `libllama_odin` binary re-exports only the intended C-ABI:
+`llama_*` (upstream llama.cpp C functions, including the `llama_odin_*`
+wrappers), `ggml_*` (ggml C-ABI reachable from the public headers), and
+`gguf_*` (`gguf.h`). All C++-mangled symbols from the vendored llama.cpp
+C++ sources are hidden from the exported surface via platform-conditional
+linker filtering configured in the root `CMakeLists.txt`:
+
+| Platform | Mechanism |
+|----------|-----------|
+| Apple    | `-Wl,-exported_symbols_list cmake/llama-odin-exported-symbols.exp` (C symbols carry a leading underscore on Mach-O) |
+| Linux    | `-Wl,--version-script cmake/llama-odin-exports.version` (`{ global: llama_*; ggml_*; gguf_*; local: *; };`) |
+| Windows  | Unchanged; DLL exports only explicitly dllexport-tagged functions |
+
+`nm -gU libllama_odin.dylib` therefore contains no C++-mangled (`__Z...`)
+symbols.
+
 ---
 
 ## 5. Native Odin Package
