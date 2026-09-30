@@ -1,0 +1,9 @@
+{
+  "id": "mi-471b10",
+  "name": "odin-package",
+  "order": 2,
+  "description": "Native Odin package implementation including foreign C bindings, idiomatic generator abstraction, MTP speculative decoding driver, and Odin unit tests",
+  "status": "in_progress",
+  "created_at": "2026-09-30T20:17:16.542342Z",
+  "completed_at": null
+}

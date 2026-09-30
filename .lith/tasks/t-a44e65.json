@@ -1,0 +1,14 @@
+{
+  "id": "t-a44e65",
+  "milestone": "mi-471b10",
+  "title": "Implement low-level Odin foreign C declarations",
+  "description": "Create odin/c/llama_c.odin with cross-platform foreign import directives for libllama_odin (system:libllama_odin.dylib on Darwin, libllama_odin.so on Linux, and llama_odin.lib on Windows). Declare low-level foreign procedures and structs for: backend lifecycle (llama_backend_init/free), ABI version and logging, hardware device enumeration (ggml_backend_dev_*), model and vocab (llama_model_*, llama_vocab_*, llama_tokenize, llama_token_to_piece), context and execution (llama_context_*, llama_batch_*, llama_decode, llama_get_logits_ith), samplers (llama_sampler_*), and MTP staging (llama_odin_*).\n\nAcceptance Criteria:\n- odin/c/llama_c.odin defines package llama_c with cross-platform foreign import blocks (Darwin, Linux, Windows)\n- Structs, pointers, token types, and procedure signatures match C-ABI definitions\n- Code compiles cleanly with Odin compiler across target platforms",
+  "status": "open",
+  "blocked_by": [
+    "t-0a921a"
+  ],
+  "assigned_to": null,
+  "created_at": "2026-09-30T20:17:38.272744Z",
+  "updated_at": "2026-09-30T20:34:49.989650Z",
+  "completed_at": null
+}

@@ -1,0 +1,9 @@
+{
+  "id": "mi-116c7b",
+  "name": "ci-release",
+  "order": 3,
+  "description": "Continuous integration workflows, automated GitHub Actions release packaging for macOS arm64, documentation, and licensing",
+  "status": "in_progress",
+  "created_at": "2026-09-30T20:17:19.406541Z",
+  "completed_at": null
+}

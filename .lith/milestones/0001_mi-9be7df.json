@@ -1,0 +1,9 @@
+{
+  "id": "mi-9be7df",
+  "name": "foundation-c-abi",
+  "order": 1,
+  "description": "Upstream llama.cpp integration, CMake build configuration with embedded Metal, C staging shim, and C-ABI verification tests",
+  "status": "in_progress",
+  "created_at": "2026-09-30T20:17:14.806401Z",
+  "completed_at": null
+}

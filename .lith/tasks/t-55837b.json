@@ -1,0 +1,14 @@
+{
+  "id": "t-55837b",
+  "milestone": "mi-9be7df",
+  "title": "Implement and execute C-ABI sanity test suite",
+  "description": "Implement tests/c/test_abi.c to verify C-ABI compatibility and symbol visibility. Verify llama_backend_init(), llama_odin_abi_version() == 1, llama_odin_silence_logs(), GPU backend device enumeration via ggml_backend_dev_*, and llama_backend_free(). Validate symbol exports on libllama_odin.dylib using nm -gU.\n\nAcceptance Criteria:\n- tests/c/test_abi.c compiles and links against libllama_odin\n- Running test_abi passes all assertions on macOS arm64\n- nm -gU libllama_odin.dylib confirms llama_odin_* and llama_* symbols are cleanly exported",
+  "status": "open",
+  "blocked_by": [
+    "t-0a921a"
+  ],
+  "assigned_to": null,
+  "created_at": "2026-09-30T20:17:34.779818Z",
+  "updated_at": "2026-09-30T20:17:34.779818Z",
+  "completed_at": null
+}

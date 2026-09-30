@@ -1,0 +1,15 @@
+{
+  "id": "t-3eab27",
+  "milestone": "mi-471b10",
+  "title": "Implement Odin test suite",
+  "description": "Create tests/odin/test_generator.odin to test native Odin bindings and generator functions. Verify backend device enumeration returns valid Metal GPU devices on macOS Apple Silicon, test vocabulary lookup and tokenization/piece decoding helpers, and test generator initialization. Execute tests via 'odin test tests/odin/ -define:ODIN_TEST_THREADS=1'.\n\nAcceptance Criteria:\n- tests/odin/test_generator.odin created with test procedures\n- Verifies Metal GPU enumeration on Apple Silicon\n- Tests tokenization and vocab helpers\n- 'odin test tests/odin/ -define:ODIN_TEST_THREADS=1' runs and passes cleanly",
+  "status": "open",
+  "blocked_by": [
+    "t-7c6bd7",
+    "t-55837b"
+  ],
+  "assigned_to": null,
+  "created_at": "2026-09-30T20:17:59.659605Z",
+  "updated_at": "2026-09-30T20:18:11.165916Z",
+  "completed_at": null
+}
