@@ -101,3 +101,10 @@ install(EXPORT llama_odin-targets
     FILE llama_odinTargets.cmake
     NAMESPACE llama_odin::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/llama_odin)
+
+# ---------------------------------------------------------------------------
+# C-ABI sanity test suite (tests/c)
+# ---------------------------------------------------------------------------
+
+enable_testing()
+add_subdirectory(tests/c)
