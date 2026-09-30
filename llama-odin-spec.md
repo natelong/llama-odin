@@ -10,7 +10,7 @@ This document is a self-contained, turnkey specification for building the extern
 **Purpose**: Provide a production-grade, precompiled C-ABI shared/static library and native Odin package wrapping upstream `llama.cpp` with embedded Apple Silicon Metal acceleration, Multi-Token Prediction (MTP) speculative decoding extensions, and high-level Odin generator abstractions.
 
 ### Core Objectives
-1. **Self-Contained Metal Acceleration**: Shaders must be compiled into binary bytecode at build time (`GGML_METAL_EMBED_LIBRARY=ON`). Zero runtime search for `.metallib` files.
+1. **Self-Contained Metal Acceleration**: Metal kernel data must be compiled into the library binary itself (`GGML_METAL_EMBED_LIBRARY=ON`) with zero runtime search for `.metallib` or `.metal` files. In the vendored fork this data is preprocessed kernel source (not precompiled bytecode), embedded in `__DATA,__ggml_metallib` sections and JIT-compiled at Metal device init — see §3.2.1 for the exact mechanism and trade-offs.
 2. **Unified C-ABI**: Re-export all necessary `llama.cpp` and `ggml` symbols alongside a clean `extern "C"` staging shim for speculative decoding (`llama_ext`), eliminating C++ mangling issues.
 3. **Idiomatic Odin Package**: Provide both low-level C foreign declarations (`package llama_c` / `llama/c`) and a high-level generator package (`package llama`).
 4. **Precompiled CI Releases**: GitHub Actions workflow that produces versioned release archives for macOS `arm64` (Apple Silicon) with SHA-256 checksums.
@@ -65,7 +65,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Force Metal acceleration with embedded bytecode on macOS
+# Force Metal acceleration with embedded Metal kernel libraries on macOS
+# (see section 3.2.1 — the vendor embeds kernel source, JIT-compiled at device init)
 if(APPLE)
     set(GGML_METAL ON CACHE BOOL "" FORCE)
     set(GGML_METAL_EMBED_LIBRARY ON CACHE BOOL "" FORCE)
@@ -76,6 +77,50 @@ endif()
 # 1. libllama_odin.dylib (Dynamic library with @rpath install name)
 # 2. libllama_odin.a     (Consolidated static library via libtool / ar)
 ```
+
+#### 3.2.1 Metal Embedding Mechanism (implementation note for §3.2)
+
+`GGML_METAL_EMBED_LIBRARY=ON` in the vendored fork (pinned commit `efa28e950`)
+does **not** embed precompiled `.metallib` *bytecode*. Instead, at build time its
+CMake logic concatenates each `kernels/<name>.metal` source with the shared
+headers (`ggml-common.h`, `ggml-metal-impl.h`, per-kernel headers), strips the
+internal includes, and embeds the resulting preprocessed Metal **source** into
+the binary: one `__DATA,__ggml_metallib` section per kernel group with
+`ggml_metallib_<name>_{start,end}` symbol pairs (~20 groups, ~1.8 MB total in
+`libllama_odin` at the pinned commit). At Metal device init, the fork's library
+init reads these embedded sources and JIT-compiles one `MTLLibrary` per kernel
+group via `newLibraryWithSource`, dispatched in parallel
+(`ggml_metal_library_compile_all`). Measured device-init compile wall time on
+Apple Silicon (M5) with the pinned fork: ~0.02–0.2 s (older forks and serial
+builds have shown multi-second JIT stalls; this one parallelizes per kernel group).
+
+The resulting `libllama_odin` binaries are fully self-contained at runtime: no
+`.metallib` or `.metal` file needs to exist on disk and no file search is
+performed (the bundle-resource / `GGML_METAL_PATH_RESOURCES` lookup only runs in
+the `GGML_METAL_EMBED_LIBRARY=OFF` build, which llama-odin never uses).
+
+**Deviation from strict "bytecode at build time" compliance**: precompiled
+`.metallib` bytecode embedding would require (a) the Apple `metal`/`metallib`
+compiler toolchain (`xcrun -sdk macosx metal` — a full Xcode toolchain; it is
+absent on Command-Line-Tools-only build hosts) and (b) a code path in the vendored
+fork that constructs an `MTLLibrary` from in-memory bytecode. The pinned fork has
+no such path: bytecode loading exists only as `newLibraryWithURL` on a
+`default.metallib` *file on disk* (a runtime file search, gated behind
+`!GGML_METAL_EMBED_LIBRARY`). Because `vendor/llama.cpp` is a pinned, read-only
+fork, llama-odin keeps the embedded-source mechanism and this note documents the
+deviation; the trade-off is a one-time (per-process) parallel JIT compile at Metal
+device init in exchange for zero runtime file dependency and robustness across
+macOS/Xcode SDK versions (no bytecode built against one SDK to be validated on
+another).
+
+**Revisit trigger** (tracked in the project backlog): switch to build-time
+`.metallib` bytecode embedding when any of the following holds:
+- the vendored fork is upgraded to a commit that provides an embedded-bytecode
+  loader usable without submodule edits (e.g. a `newLibraryWithData`-style path);
+- CI/release hosts provide Xcode tooling and a wrapper layer can replace the
+  embedded source with bytecode without touching `vendor/llama.cpp`;
+- measured device-init JIT cost becomes unacceptable on target hardware, or a
+  macOS release requires offline shader validation not achievable from source.
 
 ### 3.3 Dynamic Library Configuration
 On macOS, set the install name to support `@rpath`:
@@ -324,7 +369,7 @@ Triggered on version tags (`v*`):
 ## 8. Definition of Done for `llama-odin` Agent
 
 The implementation is complete when:
-- [ ] CMake builds `libllama_odin.dylib` with zero errors and embedded Metal shaders.
+- [ ] CMake builds `libllama_odin.dylib` with zero errors and embedded Metal kernel libraries (§3.2.1).
 - [ ] `nm -gU libllama_odin.dylib` shows exported `llama_odin_*` and `llama_*` symbols.
 - [ ] `tests/c/test_abi.c` compiles and executes successfully on macOS arm64.
 - [ ] Odin package `odin test tests/odin/` passes cleanly.
