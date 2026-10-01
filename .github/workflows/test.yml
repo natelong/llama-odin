@@ -1,0 +1,120 @@
+# Test workflow for llama-odin (parity with natelong/harper-odin, without
+# the x86 macOS leg).
+#
+# Layout notes baked into this file:
+# - vendor/llama.cpp is a real git submodule (mode 160000 in the index), so the
+#   checkout must use `submodules: recursive`.
+# - The root CMakeLists.txt branches on APPLE to force GGML_METAL=ON and
+#   GGML_METAL_EMBED_LIBRARY=ON with arm64; a plain `cmake -S . -B build`
+#   configure is sufficient on every matrix leg.
+# - The Odin test suite needs libllama_odin resolvable at link + runtime from
+#   the command's working directory (repo root). macOS relies on the two
+#   git-committed root symlinks (libllama_odin.dylib / libllama_odin.1.dylib ->
+#   build/libllama_odin.dylib, resolving the @rpath/libllama_odin.1.dylib
+#   install name against @loader_path); Linux stages an analogous
+#   libllama_odin.so symlink, and Windows stages the import lib and DLL in the
+#   repo root (git does not materialize symlinks on Windows runners by default).
+
+name: test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: windows-latest
+            # windows-latest configures the default Visual Studio generator
+            # (multi-config); build and test Release explicitly so the staging
+            # step knows where build artifacts land.
+            cmake_config_flags: --config Release
+            ctest_config_flags: -C Release
+            lib_dir: build/Release
+            c_abi_config_flags: -C Release
+          - os: macos-latest
+            cmake_config_flags: ""
+            ctest_config_flags: ""
+            lib_dir: build
+            c_abi_config_flags: ""
+          - os: ubuntu-latest
+            cmake_config_flags: ""
+            ctest_config_flags: ""
+            lib_dir: build
+            c_abi_config_flags: ""
+
+    steps:
+      - name: Checkout (with pinned llama.cpp submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Odin compiler
+        uses: laytan/setup-odin@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Odin installation
+        run: odin version
+
+      - name: Build libllama_odin shared + static libraries (CMake)
+        shell: bash
+        run: |
+          cmake -S . -B build
+          cmake --build build -j ${{ matrix.cmake_config_flags }}
+
+      # Windows only: git checks out the repo-root symlinks as plain text
+      # files on Windows runners, so stage the real import library and DLL in
+      # the repo root instead. MSVC link.exe resolves `llama_odin.lib` via LIB
+      # env or the current directory; LoadLibrary resolves the DLL from the
+      # current directory (and PATH).
+      - name: Stage Windows import library and DLL in repo root
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item build/Release/llama_odin.lib -Destination .
+          Copy-Item build/Release/llama_odin.dll -Destination .
+          "LIB=$PWD\build\Release" | Add-Content $env:GITHUB_ENV
+
+      # Linux only: the committed root symlinks are .dylib-shaped; mirror the
+      # same pattern for the .so so the linker finds libllama_odin.so from the
+      # repo root.
+      - name: Stage Linux shared-library symlink in repo root
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ln -s build/libllama_odin.so libllama_odin.so
+
+      - name: Run C-ABI sanity suite (ctest)
+        shell: bash
+        env:
+          # Build-tree rpath covers Linux; keep the env vars as belt and
+          # braces on macOS/Linux (matching the CTest property in tests/c).
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/build
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build
+        run: ctest --test-dir build --output-on-failure ${{ matrix.ctest_config_flags }}
+
+      - name: Run Odin test suite
+        shell: bash
+        env:
+          # Runtime resolution aids (unused vars are ignored per OS):
+          # macOS: DYLD_LIBRARY_PATH -> build/ (or @loader_path via the
+          #        committed root symlinks; odin test runs the test binary
+          #        from the working directory).
+          # Linux: LD_LIBRARY_PATH -> build/, plus LIBRARY_PATH for the C
+          #        driver's linker search of the staged root .so symlink.
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/build
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build
+          LIBRARY_PATH: ${{ github.workspace }}
+        run: odin test tests/odin/ -define:ODIN_TEST_THREADS=1
