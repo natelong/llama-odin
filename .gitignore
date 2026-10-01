@@ -8,3 +8,7 @@ worktrees/
 
 # OS files
 .DS_Store
+
+# Odin tool build artifacts
+odin.bin
+*.o
