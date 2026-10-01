@@ -44,10 +44,10 @@ ensure_backend :: proc() {
 
 // Locate a GGUF usable for the model-backed tests: LLAMA_ODIN_TEST_MODEL, or
 // the lexicographically smallest real (non-mmproj, non-mtp) gemma-4-E2B GGUF
-// in the local Hugging Face cache. Never downloads. The returned string is
-// allocated with the default allocator and owned by the caller ("" when none
-// is found). Allocations survive the test's tracking allocator so the path
-// can be used across calls within the test.
+// in the local Hugging Face cache. Never downloads. The returned string, when
+// non-empty, is owned by the caller and allocated ONLY with
+// runtime.default_allocator() (release it with release_model_path); "" means
+// none is found.
 @(private)
 find_test_model :: proc() -> string {
 	if p := os.get_env("LLAMA_ODIN_TEST_MODEL", context.temp_allocator); len(p) > 0 {
@@ -63,10 +63,13 @@ find_test_model :: proc() -> string {
 	defer mem.delete_string(snapshots)
 	if _, err := os.stat(snapshots, context.temp_allocator); err != nil do return ""
 
+	// Only strings this proc allocated with the default allocator are ever
+	// freed here (walker fi.name/fi.fullpath views are never stashed or
+	// freed). The env-override and aprint path above never leak either.
 	best: string
 	best_path: string
-	defer if best != "" do mem.delete_string(best)
-	defer if best_path != "" do mem.delete_string(best_path)
+	defer release_model_path(&best)
+	defer release_model_path(&best_path)
 	w: os.Walker
 	os.walker_init(&w, snapshots)
 	defer os.walker_destroy(&w)
@@ -78,18 +81,35 @@ find_test_model :: proc() -> string {
 		// Deterministic pick: lexicographically smallest candidate name.
 		take := len(best) == 0 || strings.compare(name, best) < 0
 		if take {
-			best = strings.clone(name, context.temp_allocator)
-			best_path = strings.clone(fi.fullpath, context.temp_allocator)
+			release_model_path(&best)
+			release_model_path(&best_path)
+			best = strings.clone(name, runtime.default_allocator())
+			best_path = strings.clone(fi.fullpath, runtime.default_allocator())
 		}
 	}
 	if len(best_path) == 0 do return ""
-	// Path allocated with the default allocator so it outlives the test's
-	// tracking allocator; the caller owns it (mem.delete_string).
+	// Returned copy is default-allocator-owned; the stashes are released by
+	// the defers.
 	return strings.clone(best_path, runtime.default_allocator())
+}
+
+// Release a default-allocator-owned string (find_test_model / load_test_model
+// contract: the path is always default-allocated, never owned by the test's
+// tracking or temp allocator).
+@(private)
+release_model_path :: proc(path: ^string) {
+	if path^ != "" {
+		mem.delete_string(path^, runtime.default_allocator())
+		path^ = ""
+	}
 }
 
 // Load a fresh model for one model-backed test. Returns ok=false (with a
 // note on stderr) when no suitable local GGUF exists or loading fails.
+// Ownership: on ok=true the returned path is default-allocator-owned and the
+// caller releases it with release_model_path; on ok=false path is "" and
+// must not be freed. The caller always frees ok=true `model` via
+// llama_c.llama_model_free (unless it handed the model to a generator).
 @(private)
 load_test_model :: proc() -> (model: ^llama_c.Llama_Model, vocab: ^llama_c.Llama_Vocab, path: string, ok: bool) {
 	ensure_backend()
@@ -209,7 +229,8 @@ silence_logs_is_safe_to_call :: proc(t: ^testing.T) {
 generator_new_empty_model_path_errors :: proc(t: ^testing.T) {
 	ensure_backend()
 	g, err := llama.generator_new(llama.Generator_Config_Default())
-	defer mem.delete_string(err)
+	// The empty-model-path error is a compile-time string literal produced by
+	// generator_new — not heap-allocated, so it must never be freed.
 	testing.expect(t, g == nil, "empty model_path must not create a generator")
 	testing.expect(t, len(err) > 0, "an empty model_path must return an error message")
 	testing.expect(t, strings.contains(err, "model_path is empty"))
@@ -222,6 +243,8 @@ generator_new_missing_model_path_errors :: proc(t: ^testing.T) {
 	cfg := llama.Generator_Config_Default()
 	cfg.model_path = "/nonexistent/llama_odin_missing.gguf"
 	g, err := llama.generator_new(cfg)
+	// This error is dynamically formatted (fmt.aprintf) with the caller's
+	// allocator — owned here.
 	defer mem.delete_string(err)
 	testing.expect(t, g == nil, "a missing GGUF must not create a generator")
 	testing.expect(t, strings.contains(err, "failed to load model"))
@@ -235,10 +258,8 @@ generator_new_missing_model_path_errors :: proc(t: ^testing.T) {
 @(test)
 vocabulary_reports_bos_n_tokens_eog :: proc(t: ^testing.T) {
 	model, vocab, path, ok := load_test_model()
-	defer if ok {
-		mem.delete_string(path)
-		llama_c.llama_model_free(model)
-	}
+	defer release_model_path(&path)
+	defer llama_c.llama_model_free(model) // nil-safe, no-op when !ok
 	if !ok do return
 	testing.expect(t, llama_c.llama_vocab_n_tokens(vocab) > 0, "vocabulary must report a token count")
 	bos := llama_c.llama_vocab_bos(vocab)
@@ -252,10 +273,8 @@ vocabulary_reports_bos_n_tokens_eog :: proc(t: ^testing.T) {
 @(test)
 tokenizer_tokenizes_and_decodes_pieces :: proc(t: ^testing.T) {
 	model, vocab, path, ok := load_test_model()
-	defer if ok {
-		mem.delete_string(path)
-		llama_c.llama_model_free(model)
-	}
+	defer release_model_path(&path)
+	defer llama_c.llama_model_free(model) // nil-safe, no-op when !ok
 	if !ok do return
 
 	text := "The capital of France is Paris."
@@ -302,7 +321,7 @@ generator_initializes_and_exposes_context :: proc(t: ^testing.T) {
 	// (ggml-metal-device.m:1025 "rsets->data count == 0").
 	ensure_backend()
 	path := find_test_model()
-	defer mem.delete_string(path)
+	defer release_model_path(&path)
 	if len(path) == 0 {
 		fmt.eprintln("note: no local test GGUF found; model-backed generator tests skipped")
 		return
@@ -328,7 +347,7 @@ generator_generates_greedy_text_and_streams :: proc(t: ^testing.T) {
 	// (ggml-metal-device.m:1025 "rsets->data count == 0").
 	ensure_backend()
 	path := find_test_model()
-	defer mem.delete_string(path)
+	defer release_model_path(&path)
 	if len(path) == 0 {
 		fmt.eprintln("note: no local test GGUF found; model-backed generator tests skipped")
 		return
