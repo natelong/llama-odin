@@ -156,10 +156,20 @@ Generator_Config :: struct {
 	//                       context are created from it in the same way
 	//   nextn_layer_offset: llama_odin_set_nextn_layer_offset passthrough,
 	//                       applied when a draft context is created
+	// Draft-round tuning (Mtp_Config in mtp.odin; zero values mirror the
+	// library's common_params_speculative_draft defaults):
+	//   mtp_n_draft:        max tokens drafted per round (0 = 3)
+	//   mtp_n_min:          rounds drafting fewer than this many tokens
+	//                       verify nothing (0 = never verify short drafts)
+	//   mtp_p_min:          keep drafting only while the head's top
+	//                       probability is >= this (0 = greedy, no gate)
 	load_mtp:           bool,
 	mtp_context:        bool,
 	mtp_model_path:     string,
 	nextn_layer_offset: i32,
+	mtp_n_draft:        i32,
+	mtp_n_min:          i32,
+	mtp_p_min:          f32,
 }
 
 // Default generator configuration, mirroring the library defaults:
@@ -185,9 +195,13 @@ Llama_Generator :: struct {
 	// MTP with ctx_other = ctx, as in common/speculative.cpp); owned by the
 	// generator.
 	other_ctx:  ^llama_c.Llama_Context,
-	// The draft model backing other_ctx when Generator_Config.mtp_model_path
+	// The MTP draft model backing other_ctx when Generator_Config.mtp_model_path
 	// is set; owned by the generator and freed after its context.
 	mtp_model:  ^llama_c.Llama_Model,
+	// The MTP speculative decoding driver (mtp.odin), created when the MTP
+	// draft context exists; owned by the generator and freed first on
+	// teardown. nil when MTP is not configured.
+	mtp:        ^Mtp_Driver,
 	batch:      llama_c.Llama_Batch,
 	sampler:    ^llama_c.Llama_Sampler,
 }
@@ -247,6 +261,13 @@ generator_new :: proc(cfg: Generator_Config) -> (^Llama_Generator, string) {
 	if cfg.n_threads_batch > 0 {
 		cp.n_threads_batch = cfg.n_threads_batch
 	}
+	if cfg.mtp_context || len(cfg.mtp_model_path) > 0 {
+		// Per-transaction snapshots for KV rollback of rejected draft tokens,
+		// needed on models whose memory cannot partially remove positions
+		// (recurrent/hybrid parts); the C++ driver's callers request the same
+		// (common_context_params_to_llama: n_rs_seq = draft.n_max for MTP).
+		cp.n_rs_seq = u32(cfg.mtp_n_draft > 0 ? cfg.mtp_n_draft : 3)
+	}
 
 	main_ctx := llama_c.llama_init_from_model(model, cp)
 	if main_ctx == nil {
@@ -288,6 +309,16 @@ generator_new :: proc(cfg: Generator_Config) -> (^Llama_Generator, string) {
 		if cfg.nextn_layer_offset != 0 {
 			llama_c.llama_odin_set_nextn_layer_offset(draft_ctx, cfg.nextn_layer_offset)
 		}
+
+		// The speculative decoding driver itself: nextn embedding staging
+		// flags on both contexts, the draft batch with (token, embedding)
+		// inputs, and the cross-decode hidden-row state.
+		mtp_err: string
+		g.mtp, mtp_err = mtp_driver_new(g)
+		if g.mtp == nil {
+			generator_destroy(g)
+			return nil, fmt.aprintf("llama.generator_new: failed to initialize MTP driver: %s", mtp_err)
+		}
 	}
 
 	g.batch = llama_c.llama_batch_init(batch_capacity(cfg), 0, 1)
@@ -321,6 +352,11 @@ generator_new :: proc(cfg: Generator_Config) -> (^Llama_Generator, string) {
 // backend_init at process level.
 generator_destroy :: proc(g: ^Llama_Generator) {
 	if g == nil do return
+	// Free the MTP driver before the contexts it drives.
+	if g.mtp != nil {
+		mtp_driver_destroy(g.mtp)
+		g.mtp = nil
+	}
 	if g.sampler != nil {
 		// A chain owns and frees the samplers added to it.
 		llama_c.llama_sampler_free(g.sampler)
@@ -393,6 +429,16 @@ generator_generate :: proc(
 	user_data:   rawptr,
 ) -> string {
 	if g == nil || g.model == nil || g.ctx == nil || g.sampler == nil do return ""
+
+	// MTP-configured generators run the speculative decoding loop in
+	// mtp.odin (odin/llama/mtp.odin); g.other_ctx exists only when the
+	// draft context was created (load_mtp / mtp_context / mtp_model_path).
+	if g.other_ctx != nil {
+		return mtp_generate(
+			g, prompt, turns, max_tokens, stop_seqs, cancel_flag,
+			on_token, on_progress, user_data,
+		)
+	}
 
 	n_turns := max(turns, 1)
 

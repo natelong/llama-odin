@@ -114,6 +114,15 @@ foreign llama_lib {
 	llama_sampler_free :: proc(smpl: ^Llama_Sampler) ---
 
 	// ------------------------------------------------------------------
+	// Memory access (include/llama.h) — used by the MTP speculative driver
+	// (odin/llama/mtp.odin) to roll back KV positions of rejected draft
+	// tokens on the target and draft contexts.
+	// ------------------------------------------------------------------
+
+	llama_get_memory :: proc(ctx: ^Llama_Context) -> ^Llama_Memory ---
+	llama_memory_seq_rm :: proc(mem: ^Llama_Memory, seq_id: Llama_Seq_Id, p0, p1: Llama_Pos) -> bool ---
+
+	// ------------------------------------------------------------------
 	// MTP staging (include/llama_odin.h)
 	// ------------------------------------------------------------------
 
@@ -128,6 +137,7 @@ foreign llama_lib {
 // Opaque C structs (used only via pointers)
 // ---------------------------------------------------------------------
 
+Llama_Memory :: struct {}
 Llama_Vocab :: struct {}
 Llama_Model :: struct {}
 Llama_Context :: struct {}
