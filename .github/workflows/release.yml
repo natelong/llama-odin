@@ -1,0 +1,204 @@
+# Multi-platform release workflow for llama-odin (parity with
+# natelong/harper-odin, without the x86 macOS leg — see llama-odin-spec.md §7).
+#
+# Layout notes baked into this file (mirroring .github/workflows/test.yml):
+# - vendor/llama.cpp is a real git submodule (mode 160000 in the index), so the
+#   checkout must use `submodules: recursive`.
+# - The root CMakeLists.txt branches on APPLE to force GGML_METAL=ON,
+#   GGML_METAL_EMBED_LIBRARY=ON and CMAKE_OSX_ARCHITECTURES=arm64; a plain
+#   Release configure is therefore sufficient on every matrix leg (spec §7's
+#   explicit -DGGML_METAL flags are redundant by design and are not passed).
+# - Windows uses the default Visual Studio generator (multi-config): artifacts
+#   land in build/Release. The shared target's static counterpart is renamed
+#   llama_odin_static on WIN32 by root CMakeLists.txt so it cannot collide with
+#   the llama_odin import library; lib/ therefore ships llama_odin.dll +
+#   llama_odin.lib (import) + llama_odin_static.lib (static).
+# - macOS versioned dylibs are symlinks (libllama_odin.1.dylib ->
+#   libllama_odin.1.0.0.dylib; libllama_odin.dylib -> libllama_odin.1.dylib);
+#   they are copied with `cp -P` so the @rpath/libllama_odin.1.dylib install
+#   name keeps resolving inside the package.
+# - A consumer compiling against the shipped include/llama.h needs the
+#   transitive vendored ggml headers it includes (ggml.h, ggml-alloc.h,
+#   ggml-backend.h, ggml-cpu.h, ggml-opt.h, gguf.h from
+#   vendor/llama.cpp/ggml/include/); they are copied next to the two
+#   documented headers into the package's include/.
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish artifacts to GitHub Releases'
+        type: boolean
+        default: false
+      tag_name:
+        description: 'Tag name for the release (v-prefixed, e.g. v0.1.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build-${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest          # arm64 Apple Silicon runner (macos-14 parity)
+            target: aarch64-apple-darwin
+            lib_ext: dylib
+            build_dir: build
+            cmake_config_args: -DCMAKE_BUILD_TYPE=Release
+            cmake_build_config: ""
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            lib_ext: so
+            build_dir: build
+            cmake_config_args: -DCMAKE_BUILD_TYPE=Release
+            cmake_build_config: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            lib_ext: dll
+            build_dir: build/Release
+            cmake_config_args: ""
+            cmake_build_config: --config Release
+
+    steps:
+      - name: Checkout (with pinned llama.cpp submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build libllama_odin shared + static libraries (Release)
+        shell: bash
+        run: |
+          cmake -S . -B build ${{ matrix.cmake_config_args }}
+          cmake --build build --parallel ${{ matrix.cmake_build_config }}
+
+      # Stages lib/, include/, odin/, LICENSE, README.md into a directory named
+      # exactly like the archive basename (that becomes the tarball root), then
+      # writes an internal checksums.txt manifest inside the archive and a
+      # standalone <ARCHIVE_NAME>.sha256 next to it.
+      - name: Package release tarball + checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Version resolution: workflow_dispatch tag_name input > tag push
+          # GITHUB_REF_NAME > short sha fallback. Always v-prefixed (matches
+          # the README examples: llama-odin-aarch64-apple-darwin-v0.1.0.tar.gz).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.tag_name }}"
+            if [ -z "$VERSION" ]; then
+              VERSION="${GITHUB_SHA:0:7}"
+            fi
+          else
+            VERSION="$GITHUB_REF_NAME"
+          fi
+          case "$VERSION" in
+            v*) ;;
+            *) VERSION="v$VERSION" ;;
+          esac
+          ARCHIVE_NAME="llama-odin-${{ matrix.target }}-${VERSION}"
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+          echo "Archive: ${ARCHIVE_NAME}.tar.gz"
+
+          # sha256 with sha256sum-compatible output on all three runners
+          # (macOS runners ship shasum instead of GNU sha256sum).
+          if command -v sha256sum >/dev/null 2>&1; then
+            HASH256=(sha256sum)
+          else
+            HASH256=(shasum -a 256)
+          fi
+
+          mkdir -p "${ARCHIVE_NAME}/lib" "${ARCHIVE_NAME}/include"
+
+          # Shared library + its versioned symlinks (macOS/Linux). The glob
+          # intentionally matches nothing on Windows (no lib...dll prefix).
+          # shellcheck disable=SC2031,SC2035,SC2086
+          cp -P build/libllama_odin*.${{ matrix.lib_ext }}* "${ARCHIVE_NAME}/lib/" 2>/dev/null || true
+          cp build/libllama_odin.a "${ARCHIVE_NAME}/lib/" 2>/dev/null \
+            || cp build/Release/llama_odin_static.lib "${ARCHIVE_NAME}/lib/"
+          if [ "${{ matrix.lib_ext }}" = "dll" ]; then
+            cp build/Release/llama_odin.dll     "${ARCHIVE_NAME}/lib/"
+            cp build/Release/llama_odin.lib     "${ARCHIVE_NAME}/lib/"   # import library
+          fi
+
+          cp include/*.h "${ARCHIVE_NAME}/include/"
+          # Transitive vendored ggml headers required by include/llama.h.
+          cp vendor/llama.cpp/ggml/include/ggml.h \
+             vendor/llama.cpp/ggml/include/ggml-alloc.h \
+             vendor/llama.cpp/ggml/include/ggml-backend.h \
+             vendor/llama.cpp/ggml/include/ggml-cpu.h \
+             vendor/llama.cpp/ggml/include/ggml-opt.h \
+             vendor/llama.cpp/ggml/include/gguf.h \
+             "${ARCHIVE_NAME}/include/"
+          cp -R odin "${ARCHIVE_NAME}/odin"
+          cp LICENSE README.md "${ARCHIVE_NAME}/"
+
+          # Internal manifest: sha256 of every file in the package. Written
+          # to a temp name first to avoid reading and writing the manifest in
+          # one pipeline.
+          (cd "${ARCHIVE_NAME}" && find . -type f -not -name 'checksums.txt*' \
+            -exec "${HASH256[@]}" {} + > checksums.txt.tmp && mv checksums.txt.tmp checksums.txt)
+
+          tar -czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+
+          # Standalone per-archive checksum (sha256sum-compatible line).
+          "${HASH256[@]}" "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.sha256"
+
+          tar -tzf "${ARCHIVE_NAME}.tar.gz"
+
+      - name: Upload matrix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: |
+            llama-odin-*.tar.gz
+            llama-odin-*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: publish-github-release
+    needs: build
+    runs-on: ubuntu-latest
+    # Tag push, or manual dispatch that explicitly opts in to publishing.
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_release == true)
+
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Consolidate checksums across platforms
+        run: |
+          cat release-assets/*.sha256 > checksums.txt
+          cat checksums.txt
+          mv checksums.txt release-assets/checksums.txt
+          ls -l release-assets
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
+          files: |
+            release-assets/llama-odin-*.tar.gz
+            release-assets/llama-odin-*.sha256
+            release-assets/checksums.txt
+          generate_release_notes: true
