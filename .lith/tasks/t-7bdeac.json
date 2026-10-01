@@ -1,0 +1,12 @@
+{
+  "id": "t-7bdeac",
+  "milestone": null,
+  "title": "Revisit Metal .metallib bytecode embedding (upstream fork lacks embedded-bytecode loader; requires Xcode metal/metal toolchain). Trigger: vendored fork upgrade with a newLibraryWithData-style path usable without submodule edits, Xcode available on build hosts with a wrapper layer, or unacceptable device-init JIT cost. Deviation documented in llama-odin-spec.md §3.2.1 (from t-ff0a2d).",
+  "description": null,
+  "status": "open",
+  "blocked_by": [],
+  "assigned_to": null,
+  "created_at": "2026-09-30T23:44:37.667848Z",
+  "updated_at": "2026-09-30T23:45:07.136379Z",
+  "completed_at": null
+}

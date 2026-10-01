@@ -12,3 +12,5 @@ worktrees/
 # Odin tool build artifacts
 odin.bin
 *.o
+
+.agents/

@@ -1,0 +1,366 @@
+{
+  "milestones": [
+    {
+      "id": "mi-9be7df",
+      "name": "foundation-c-abi",
+      "order": 1,
+      "description": "Upstream llama.cpp integration, CMake build configuration with embedded Metal, C staging shim, and C-ABI verification tests",
+      "status": "complete",
+      "created_at": "2026-09-30T20:17:14.806401Z",
+      "completed_at": "2026-09-30T23:49:11.175310Z"
+    },
+    {
+      "id": "mi-471b10",
+      "name": "odin-package",
+      "order": 2,
+      "description": "Native Odin package implementation including foreign C bindings, idiomatic generator abstraction, MTP speculative decoding driver, and Odin unit tests",
+      "status": "complete",
+      "created_at": "2026-09-30T20:17:16.542342Z",
+      "completed_at": "2026-10-01T01:18:35.177490Z"
+    },
+    {
+      "id": "mi-116c7b",
+      "name": "ci-release",
+      "order": 3,
+      "description": "Continuous integration workflows, automated GitHub Actions release packaging for macOS arm64, documentation, and licensing",
+      "status": "complete",
+      "created_at": "2026-09-30T20:17:19.406541Z",
+      "completed_at": "2026-10-01T01:29:02.206613Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t-98cf84",
+      "milestone": "mi-9be7df",
+      "title": "Integrate upstream llama.cpp dependency",
+      "description": "Track upstream llama.cpp repository via Git submodule (pinned to stable commit e.g. b3800+) or vendored in vendor/llama.cpp, ensuring ggml and internal headers (such as llama-ext.h) required by the staging shim are accessible.\n\nAcceptance Criteria:\n- Upstream llama.cpp source tracked via submodule or vendored path\n- Core headers (llama.h, ggml.h, llama-ext.h) accessible for build system\n- Clean integration without unintended modifications to upstream files",
+      "status": "completed",
+      "blocked_by": [],
+      "assigned_to": "worker-t-98cf84",
+      "created_at": "2026-09-30T20:17:24.639866Z",
+      "updated_at": "2026-09-30T20:46:14.725367Z",
+      "completed_at": "2026-09-30T20:46:14.725367Z"
+    },
+    {
+      "id": "t-165ef6",
+      "milestone": "mi-9be7df",
+      "title": "Implement unified C-ABI header and C++ extension shim",
+      "description": "Create include/llama_odin.h and src/llama_odin_ext.cpp. Expose extern \"C\" interface for LLAMA_ODIN_ABI_VERSION, llama_odin_abi_version(), llama_odin_silence_logs() (using a null log callback), and Multi-Token Prediction (MTP) staging procedures (llama_odin_set_embeddings_nextn, llama_odin_get_embeddings_nextn, llama_odin_get_embeddings_nextn_ith, llama_odin_set_nextn_layer_offset, and llama_odin_get_ctx_other). Provide include/llama.h for downstream consumers.\n\nAcceptance Criteria:\n- include/llama_odin.h defines LLAMA_ODIN_ABI_VERSION 1 and declares all wrapper functions\n- src/llama_odin_ext.cpp implements extern \"C\" shims wrapping llama-ext.h functions\n- Log silencing sets null log callback via llama_log_set\n- include/llama.h correctly placed in include directory",
+      "status": "completed",
+      "blocked_by": [
+        "t-98cf84"
+      ],
+      "assigned_to": "worker-t-165ef6",
+      "created_at": "2026-09-30T20:17:28.042429Z",
+      "updated_at": "2026-09-30T20:49:22.029180Z",
+      "completed_at": "2026-09-30T20:49:22.029180Z"
+    },
+    {
+      "id": "t-0a921a",
+      "milestone": "mi-9be7df",
+      "title": "Configure root CMake build system with embedded Metal",
+      "description": "Implement root CMakeLists.txt to build libllama_odin shared and static library targets. Configure C++17 and position-independent code. On macOS, force GGML_METAL=ON, GGML_METAL_EMBED_LIBRARY=ON, CMAKE_OSX_ARCHITECTURES='arm64', dynamic library install name to '@rpath', SOVERSION 1, VERSION 1.0.0, and link Metal, Foundation, and Accelerate frameworks. On Linux and Windows, configure standard compilation targets and export rules.\n\nAcceptance Criteria:\n- CMake builds shared and static library targets across target platforms\n- On macOS, Metal shaders compiled into binary bytecode at build time with GGML_METAL_EMBED_LIBRARY=ON\n- Dynamic library configured with MACOSX_RPATH ON and INSTALL_NAME_DIR '@rpath' on macOS\n- Builds cleanly on macOS arm64, Linux x86_64, and Windows x64",
+      "status": "completed",
+      "blocked_by": [
+        "t-165ef6"
+      ],
+      "assigned_to": "worker-t-0a921a",
+      "created_at": "2026-09-30T20:17:32.220505Z",
+      "updated_at": "2026-09-30T23:14:54.272815Z",
+      "completed_at": "2026-09-30T23:14:54.272815Z"
+    },
+    {
+      "id": "t-55837b",
+      "milestone": "mi-9be7df",
+      "title": "Implement and execute C-ABI sanity test suite",
+      "description": "Implement tests/c/test_abi.c to verify C-ABI compatibility and symbol visibility. Verify llama_backend_init(), llama_odin_abi_version() == 1, llama_odin_silence_logs(), GPU backend device enumeration via ggml_backend_dev_*, and llama_backend_free(). Validate symbol exports on libllama_odin.dylib using nm -gU.\n\nAcceptance Criteria:\n- tests/c/test_abi.c compiles and links against libllama_odin\n- Running test_abi passes all assertions on macOS arm64\n- nm -gU libllama_odin.dylib confirms llama_odin_* and llama_* symbols are cleanly exported",
+      "status": "completed",
+      "blocked_by": [
+        "t-0a921a"
+      ],
+      "assigned_to": "worker-t-55837b",
+      "created_at": "2026-09-30T20:17:34.779818Z",
+      "updated_at": "2026-09-30T23:17:16.519578Z",
+      "completed_at": "2026-09-30T23:17:16.519578Z"
+    },
+    {
+      "id": "t-a44e65",
+      "milestone": "mi-471b10",
+      "title": "Implement low-level Odin foreign C declarations",
+      "description": "Create odin/c/llama_c.odin with cross-platform foreign import directives for libllama_odin (system:libllama_odin.dylib on Darwin, libllama_odin.so on Linux, and llama_odin.lib on Windows). Declare low-level foreign procedures and structs for: backend lifecycle (llama_backend_init/free), ABI version and logging, hardware device enumeration (ggml_backend_dev_*), model and vocab (llama_model_*, llama_vocab_*, llama_tokenize, llama_token_to_piece), context and execution (llama_context_*, llama_batch_*, llama_decode, llama_get_logits_ith), samplers (llama_sampler_*), and MTP staging (llama_odin_*).\n\nAcceptance Criteria:\n- odin/c/llama_c.odin defines package llama_c with cross-platform foreign import blocks (Darwin, Linux, Windows)\n- Structs, pointers, token types, and procedure signatures match C-ABI definitions\n- Code compiles cleanly with Odin compiler across target platforms",
+      "status": "completed",
+      "blocked_by": [
+        "t-0a921a"
+      ],
+      "assigned_to": "worker-t-a44e65",
+      "created_at": "2026-09-30T20:17:38.272744Z",
+      "updated_at": "2026-09-30T23:53:37.167004Z",
+      "completed_at": "2026-09-30T23:53:37.167004Z"
+    },
+    {
+      "id": "t-45513b",
+      "milestone": "mi-471b10",
+      "title": "Implement high-level Odin generator package",
+      "description": "Implement odin/llama/llama.odin providing idiomatic Odin types and procedures: Device_Info, Device_Kind, devices() -> []Device_Info for hardware discovery, Generator_Config (model path, layers, speculative settings), Llama_Generator struct (encapsulating model, context, batch, sampler chain), generator_new(cfg) -> (^Llama_Generator, string), and generator_generate(g, prompt, turns, max_tokens, stop_seqs, cancel_flag, on_token, on_progress, user_data) supporting streaming tokens and cancellation.\n\nAcceptance Criteria:\n- odin/llama/llama.odin exposes idiomatic Device_Info and devices() helper\n- Llama_Generator properly initializes model, context, and samplers via generator_new\n- generator_generate streams generated tokens via callback and handles stop sequences and cancellation\n- Proper resource cleanup procs implemented",
+      "status": "completed",
+      "blocked_by": [
+        "t-a44e65"
+      ],
+      "assigned_to": "worker-t-45513b",
+      "created_at": "2026-09-30T20:17:41.742659Z",
+      "updated_at": "2026-10-01T00:11:47.463205Z",
+      "completed_at": "2026-10-01T00:11:47.463205Z"
+    },
+    {
+      "id": "t-7c6bd7",
+      "milestone": "mi-471b10",
+      "title": "Implement Odin Multi-Token Prediction (MTP) driver",
+      "description": "Implement odin/llama/mtp.odin to support Multi-Token Prediction speculative decoding. Drive draft token prediction, next-n embedding staging via llama_odin_set_embeddings_nextn, llama_odin_get_embeddings_nextn_ith, and llama_odin_set_nextn_layer_offset, and token verification against the primary context.\n\nAcceptance Criteria:\n- odin/llama/mtp.odin implements MTP speculative driver logic\n- Correctly configures next-n embedding staging and offset calls\n- Integrates seamlessly with Llama_Generator speculative decoding options",
+      "status": "completed",
+      "blocked_by": [
+        "t-45513b"
+      ],
+      "assigned_to": "worker-t-7c6bd7",
+      "created_at": "2026-09-30T20:17:49.003986Z",
+      "updated_at": "2026-10-01T00:50:50.217563Z",
+      "completed_at": "2026-10-01T00:50:50.217563Z"
+    },
+    {
+      "id": "t-3eab27",
+      "milestone": "mi-471b10",
+      "title": "Implement Odin test suite",
+      "description": "Create tests/odin/test_generator.odin to test native Odin bindings and generator functions. Verify backend device enumeration returns valid Metal GPU devices on macOS Apple Silicon, test vocabulary lookup and tokenization/piece decoding helpers, and test generator initialization. Execute tests via 'odin test tests/odin/ -define:ODIN_TEST_THREADS=1'.\n\nAcceptance Criteria:\n- tests/odin/test_generator.odin created with test procedures\n- Verifies Metal GPU enumeration on Apple Silicon\n- Tests tokenization and vocab helpers\n- 'odin test tests/odin/ -define:ODIN_TEST_THREADS=1' runs and passes cleanly",
+      "status": "completed",
+      "blocked_by": [
+        "t-7c6bd7",
+        "t-55837b",
+        "t-77ad49"
+      ],
+      "assigned_to": "worker-t-3eab27",
+      "created_at": "2026-09-30T20:17:59.659605Z",
+      "updated_at": "2026-10-01T01:18:35.147046Z",
+      "completed_at": "2026-10-01T01:18:35.147046Z"
+    },
+    {
+      "id": "t-c1e92e",
+      "milestone": "mi-116c7b",
+      "title": "Create CI test workflow in .github/workflows/test.yml",
+      "description": "Create .github/workflows/test.yml GitHub Actions workflow for pull requests and pushes to main/master matching natelong/harper-odin parity (omitting x86 OSX):\n- Multi-platform test matrix: macos-latest (Apple Silicon arm64), ubuntu-latest (Linux x86_64), and windows-latest (Windows x64).\n- Setup Odin compiler using laytan/setup-odin@v2 with token: ${{ secrets.GITHUB_TOKEN }}.\n- Verify Odin installation via odin version.\n- Build libllama_odin shared and static libraries via CMake (with embedded Metal on macOS, and standard CPU targets on Linux and Windows).\n- Run C-ABI sanity test suite (tests/c/test_abi.c).\n- Run Odin test suite: odin test tests/odin/ -define:ODIN_TEST_THREADS=1.\n\nAcceptance Criteria:\n- .github/workflows/test.yml configured with multi-platform matrix (macos-latest, ubuntu-latest, windows-latest)\n- Triggers on push and pull_request to main and master\n- Sets up Odin compiler via laytan/setup-odin@v2\n- Builds native libraries and executes both C-ABI and Odin test suites successfully across all matrix platforms",
+      "status": "completed",
+      "blocked_by": [
+        "t-3eab27"
+      ],
+      "assigned_to": "worker-t-c1e92e",
+      "created_at": "2026-09-30T20:18:15.520109Z",
+      "updated_at": "2026-10-01T01:23:51.310929Z",
+      "completed_at": "2026-10-01T01:23:51.310929Z"
+    },
+    {
+      "id": "t-f71a11",
+      "milestone": "mi-116c7b",
+      "title": "Create multi-platform release workflow in .github/workflows/release.yml",
+      "description": "Create .github/workflows/release.yml GitHub Actions workflow matching natelong/harper-odin parity (omitting x86 OSX):\n- Triggers on tag pushes (v*) and workflow_dispatch with publish_release (boolean) and tag_name (string) inputs.\n- Permissions: contents: write.\n- Multi-platform build matrix:\n  - macos-14: target aarch64-apple-darwin, lib_ext dylib, lib_static libllama_odin.a (embedded Metal: -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DCMAKE_OSX_ARCHITECTURES=\"arm64\")\n  - ubuntu-latest: target x86_64-unknown-linux-gnu, lib_ext so, lib_static libllama_odin.a\n  - windows-latest: target x86_64-pc-windows-msvc, lib_ext dll, lib_static llama_odin.lib (including import library)\n  (macos-13 / x86_64-apple-darwin excluded per instructions).\n- Flexible version determination supporting workflow_dispatch input, tag push GITHUB_REF_NAME, or short sha fallback.\n- Package release tarball llama-odin-${TARGET}-${VERSION}.tar.gz containing:\n  - lib/ (static and dynamic libraries)\n  - include/ (include/llama_odin.h and include/llama.h)\n  - odin/ (package sources)\n  - LICENSE and README.md\n- Generate internal manifest checksums.txt inside archive and standalone ${ARCHIVE_NAME}.sha256 file.\n- Upload matrix artifacts via actions/upload-artifact@v4 (name: artifacts-${{ matrix.target }}).\n- Two-stage publish job on ubuntu-latest:\n  - Download all build artifacts via actions/download-artifact@v4 (pattern: artifacts-*, merge-multiple: true).\n  - Generate consolidated checksums.txt across all platform tarballs.\n  - Publish assets to GitHub Release via softprops/action-gh-release@v2 with generate_release_notes: true.\n\nAcceptance Criteria:\n- .github/workflows/release.yml implements full two-stage matrix build and publish pipeline\n- Targets macOS arm64, Linux x86_64, and Windows x64 (excluding x86 OSX)\n- Supports both tag push and manual workflow_dispatch triggering\n- Generates per-archive and consolidated SHA-256 checksum manifests and publishes to GitHub Releases",
+      "status": "completed",
+      "blocked_by": [
+        "t-c1e92e",
+        "t-1cd36c"
+      ],
+      "assigned_to": "worker-t-f71a11",
+      "created_at": "2026-09-30T20:18:18.454450Z",
+      "updated_at": "2026-10-01T01:29:00.903218Z",
+      "completed_at": "2026-10-01T01:29:00.903218Z"
+    },
+    {
+      "id": "t-1cd36c",
+      "milestone": "mi-116c7b",
+      "title": "Create project documentation and license",
+      "description": "Create LICENSE with standard MIT license text and README.md with comprehensive documentation. Document project mission, prerequisites (macOS arm64, Xcode/Metal, CMake, Odin), build commands, directory structure, low-level C bindings usage, high-level Odin generator usage (including streaming and stop sequences), MTP speculative decoding instructions, and release workflow details.\n\nAcceptance Criteria:\n- LICENSE file created containing valid MIT license\n- README.md provides complete quickstart, build commands, and Odin API code examples\n- Accurately details embedded Metal architecture and MTP speculative decoding",
+      "status": "completed",
+      "blocked_by": [
+        "t-3eab27"
+      ],
+      "assigned_to": "worker-t-1cd36c",
+      "created_at": "2026-09-30T20:18:21.446402Z",
+      "updated_at": "2026-10-01T01:22:06.756886Z",
+      "completed_at": "2026-10-01T01:22:06.756886Z"
+    },
+    {
+      "id": "t-ff0a2d",
+      "milestone": null,
+      "title": "ggml-metal build in vendored fork embeds Metal kernel source (jit at runtime) under GGML_METAL_EMBED_LIBRARY=ON; evaluate adding build-time .metallib bytecode embedding for strict spec compliance",
+      "description": null,
+      "status": "completed",
+      "blocked_by": [],
+      "assigned_to": "worker-t-ff0a2d",
+      "created_at": "2026-09-30T23:14:09.715602Z",
+      "updated_at": "2026-09-30T23:45:02.565819Z",
+      "completed_at": "2026-09-30T23:45:02.565819Z"
+    },
+    {
+      "id": "t-f667a8",
+      "milestone": null,
+      "title": "Hide C++-mangled llama internals from libllama_odin exported C-ABI surface (visibility: hidden / version script)",
+      "description": null,
+      "status": "completed",
+      "blocked_by": [],
+      "assigned_to": "worker-t-f667a8",
+      "created_at": "2026-09-30T23:17:03.896969Z",
+      "updated_at": "2026-09-30T23:42:40.239020Z",
+      "completed_at": "2026-09-30T23:42:40.239020Z"
+    },
+    {
+      "id": "t-77ad49",
+      "milestone": "mi-471b10",
+      "title": "Address review feedback: Implement Odin test suite",
+      "description": "Feedback for merge m-4fa65e (branch 'feat/t-3eab27'):\nAll 11 tests pass, but the run emits Odin 'bad free' diagnostics in test code. Root causes: (1) test_generator.odin find_test_model: best/best_path can be assigned strings not allocated with default_allocator (e.g. walker fi.name), then freed by the deferred mem.delete_string — free only strings this proc itself allocated (clone into best/best_path or track ownership). (2) vocabulary_reports_bos_n_tokens_eog line 239: bad free in the deferred cleanup — load_test_model must return a path that is always default_allocator-owned (including on the failure path) or the caller must not delete it; align ownership with clone semantics. Fix both, rerun 'odin test tests/odin/ -define:ODIN_TEST_THREADS=1' until 'All tests were successful' with ZERO bad-free/leak diagnostics, then resubmit.",
+      "status": "completed",
+      "blocked_by": [],
+      "assigned_to": "worker-t-3eab27",
+      "created_at": "2026-10-01T01:16:28.194197Z",
+      "updated_at": "2026-10-01T01:18:15.293162Z",
+      "completed_at": "2026-10-01T01:18:15.293162Z"
+    }
+  ],
+  "merges": [
+    {
+      "id": "m-28235a",
+      "task_id": "t-98cf84",
+      "branch": "feat/t-98cf84",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-09-30T20:46:04.027626Z",
+      "updated_at": "2026-09-30T20:46:14.725367Z"
+    },
+    {
+      "id": "m-4730b7",
+      "task_id": "t-165ef6",
+      "branch": "feat/t-165ef6",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-09-30T20:49:11.854648Z",
+      "updated_at": "2026-09-30T20:49:22.029180Z"
+    },
+    {
+      "id": "m-96510a",
+      "task_id": "t-0a921a",
+      "branch": "feat/t-0a921a",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-09-30T23:14:39.306147Z",
+      "updated_at": "2026-09-30T23:14:54.272815Z"
+    },
+    {
+      "id": "m-b5c3c4",
+      "task_id": "t-55837b",
+      "branch": "feat/t-55837b",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-09-30T23:17:04.983744Z",
+      "updated_at": "2026-09-30T23:17:16.519578Z"
+    },
+    {
+      "id": "m-329b34",
+      "task_id": "t-f667a8",
+      "branch": "feat/t-f667a8",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-09-30T23:42:24.349013Z",
+      "updated_at": "2026-09-30T23:42:40.239020Z"
+    },
+    {
+      "id": "m-362b83",
+      "task_id": "t-ff0a2d",
+      "branch": "feat/t-ff0a2d",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-09-30T23:44:44.051310Z",
+      "updated_at": "2026-09-30T23:45:02.565819Z"
+    },
+    {
+      "id": "m-49b8a6",
+      "task_id": "t-a44e65",
+      "branch": "feat/t-a44e65",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-09-30T23:53:19.267093Z",
+      "updated_at": "2026-09-30T23:53:37.167004Z"
+    },
+    {
+      "id": "m-a11569",
+      "task_id": "t-45513b",
+      "branch": "feat/t-45513b",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-10-01T00:11:26.427709Z",
+      "updated_at": "2026-10-01T00:11:47.463205Z"
+    },
+    {
+      "id": "m-8b8090",
+      "task_id": "t-7c6bd7",
+      "branch": "feat/t-7c6bd7",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-10-01T00:49:26.370048Z",
+      "updated_at": "2026-10-01T00:50:50.217563Z"
+    },
+    {
+      "id": "m-4fa65e",
+      "task_id": "t-3eab27",
+      "branch": "feat/t-3eab27",
+      "status": "rejected",
+      "rejection_reason": "All 11 tests pass, but the run emits Odin 'bad free' diagnostics in test code. Root causes: (1) test_generator.odin find_test_model: best/best_path can be assigned strings not allocated with default_allocator (e.g. walker fi.name), then freed by the deferred mem.delete_string — free only strings this proc itself allocated (clone into best/best_path or track ownership). (2) vocabulary_reports_bos_n_tokens_eog line 239: bad free in the deferred cleanup — load_test_model must return a path that is always default_allocator-owned (including on the failure path) or the caller must not delete it; align ownership with clone semantics. Fix both, rerun 'odin test tests/odin/ -define:ODIN_TEST_THREADS=1' until 'All tests were successful' with ZERO bad-free/leak diagnostics, then resubmit.",
+      "feedback_task_id": "t-77ad49",
+      "created_at": "2026-10-01T01:15:45.001900Z",
+      "updated_at": "2026-10-01T01:16:28.194198Z"
+    },
+    {
+      "id": "m-bea6c7",
+      "task_id": "t-3eab27",
+      "branch": "feat/t-3eab27",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-10-01T01:18:15.336502Z",
+      "updated_at": "2026-10-01T01:18:35.147046Z"
+    },
+    {
+      "id": "m-d60ba0",
+      "task_id": "t-1cd36c",
+      "branch": "feat/t-1cd36c",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-10-01T01:21:34.964068Z",
+      "updated_at": "2026-10-01T01:22:06.756886Z"
+    },
+    {
+      "id": "m-0ba87e",
+      "task_id": "t-c1e92e",
+      "branch": "feat/t-c1e92e",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-10-01T01:23:34.526559Z",
+      "updated_at": "2026-10-01T01:23:51.310929Z"
+    },
+    {
+      "id": "m-c2a015",
+      "task_id": "t-f71a11",
+      "branch": "feat/t-f71a11",
+      "status": "merged",
+      "rejection_reason": null,
+      "feedback_task_id": null,
+      "created_at": "2026-10-01T01:28:41.417939Z",
+      "updated_at": "2026-10-01T01:29:00.903218Z"
+    }
+  ]
+}
